@@ -1,4 +1,4 @@
-use std::io::{stdout, Stdout};
+use std::io::stdout;
 use std::time::Duration;
 
 use futures::{future::FutureExt, select, StreamExt};
@@ -6,10 +6,7 @@ use futures_timer::Delay;
 
 use crossterm::event::Event::{Key, Mouse, Resize};
 use crossterm::event::KeyCode::Char;
-use crossterm::{
-    cursor::position,
-    event::{Event, EventStream, KeyCode, MouseEvent},
-};
+use crossterm::event::{Event, EventStream, KeyCode};
 
 mod input;
 use input::Input;
@@ -28,7 +25,8 @@ pub async fn game_loop() {
 
         select! {
             _ = delay => {
-                draw(&mut stdout);
+                draw(&mut stdout, &input).expect("[!] Draw failed");
+                input.reset();
             }
             maybe_event = event => {
                 match maybe_event {
@@ -37,9 +35,10 @@ pub async fn game_loop() {
                             break;
                         }
                     }
-                    Some(Err(e)) => {println!("Error: {:?}\r", e);
-                    break;
-                },
+                    Some(Err(e)) => {
+                        println!("Error: {:?}\r", e);
+                        break;
+                    },
                     None => break,
                 }
             }
@@ -55,11 +54,17 @@ fn update_input(input: &mut Input, event: &Event) -> bool {
             }
 
             if let Char(c) = ke.code {
-                if c <= '9' && c >= '0' {}
+                if c >= '0' && c <= '9' {
+                    input.num_key_bitwise |= 0x01 << ((c as u8) - 0x30);
+                } else if c == 'r' {
+                    input.run_prog = true;
+                } else if c == 's' {
+                    input.stop_prog = true;
+                }
             }
         }
-        Mouse(me) => {}
-        Resize(x, y) => {}
+        Mouse(_me) => {}
+        Resize(_x, _y) => {}
     }
 
     false
