@@ -1,34 +1,24 @@
-use crossterm::event::EventStream;
-use crossterm::Result;
-use std::io::{stdout, Stdout};
-use std::{thread, time};
+use std::io::stdout;
 
-mod draw;
-use draw::draw;
+use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode},
+    Result,
+};
 
-mod event;
-use event::update_keys;
-
-mod input;
-use input::Input;
-
-const TICKRATE_MS: u64 = 100;
+mod game;
+use game::game_loop;
 
 fn main() -> Result<()> {
-    let mut t = time::Instant::now();
-    let mut input = Input::default();
-    let mut eventstream = EventStream::new();
-    let mut stdout: Stdout = stdout();
+    enable_raw_mode()?;
 
-    loop {
-        if t.elapsed() < time::Duration::from_millis(TICKRATE_MS) {
-            thread::sleep(t.elapsed() - time::Duration::from_millis(TICKRATE_MS));
-        }
+    let mut stdout = stdout();
+    execute!(stdout, EnableMouseCapture)?;
 
-        draw(&mut stdout)?;
+    async_std::task::block_on(game_loop());
 
-        t = time::Instant::now();
-    }
+    execute!(stdout, DisableMouseCapture)?;
 
-    Ok(())
+    disable_raw_mode()
 }
