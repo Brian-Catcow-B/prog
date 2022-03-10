@@ -1,13 +1,24 @@
-use crossterm::Result;
-use std::io::{stdout, Stdout};
+use std::io::stdout;
 
-mod draw;
-use draw::draw;
+use crossterm::{
+    event::{DisableMouseCapture, EnableMouseCapture},
+    execute,
+    terminal::{disable_raw_mode, enable_raw_mode},
+    Result,
+};
+
+mod game;
+use game::game_loop;
 
 fn main() -> Result<()> {
-    let mut stdout: Stdout = stdout();
+    enable_raw_mode()?;
 
-    draw(&mut stdout)?;
+    let mut stdout = stdout();
+    execute!(stdout, EnableMouseCapture)?;
 
-    Ok(())
+    async_std::task::block_on(game_loop());
+
+    execute!(stdout, DisableMouseCapture)?;
+
+    disable_raw_mode()
 }
