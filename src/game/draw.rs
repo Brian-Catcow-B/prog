@@ -1,5 +1,6 @@
 use crossterm::{cursor, style, terminal, ExecutableCommand, QueueableCommand, Result};
 use std::io::{Stdout, Write};
+use std::ops::{BitAnd, BitOr};
 
 use crate::game::Input;
 
@@ -18,6 +19,46 @@ const LEFT_MENU_HELP_L_INDEX: u16 = 0;
 const LEFT_MENU_HELP_WIDTH: u16 = 8;
 const LEFT_MENU_HELP_R_INDEX: u16 = LEFT_MENU_HELP_L_INDEX + LEFT_MENU_HELP_WIDTH + 1;
 
+pub trait Bitmask<Arg = Self> {
+    fn is_set(self, flag: Arg) -> bool;
+    fn set(&mut self, flag: Arg);
+}
+
+pub type DrawFlagsMask = u64;
+#[repr(u64)]
+pub enum DrawFlags {
+    All = 0xFF_FF_FF_FF_FF_FF_FF_FF,
+    Clear = 0x01,
+    ConstPerifs = 0x02,
+    ProgContents = 0x04,
+}
+
+impl BitAnd<DrawFlags> for DrawFlagsMask {
+    type Output = DrawFlagsMask;
+
+    fn bitand(self, rhs: DrawFlags) -> DrawFlagsMask {
+        self & rhs as DrawFlagsMask
+    }
+}
+
+impl BitOr<DrawFlags> for DrawFlagsMask {
+    type Output = DrawFlagsMask;
+
+    fn bitor(self, rhs: DrawFlags) -> DrawFlagsMask {
+        self | rhs as DrawFlagsMask
+    }
+}
+
+impl Bitmask<DrawFlags> for DrawFlagsMask {
+    fn is_set(self, flag: DrawFlags) -> bool {
+        self & flag > 0
+    }
+
+    fn set(&mut self, flag: DrawFlags) {
+        (*self) = (*self) | flag;
+    }
+}
+
 enum CutSecStyle {
     NoIntersect,
     IntersectBothEnds,
@@ -25,53 +66,26 @@ enum CutSecStyle {
     IntersectMSV,
 }
 
-pub fn draw(stdout: &mut Stdout, input: &Input) -> Result<()> {
-    stdout.execute(terminal::Clear(terminal::ClearType::All))?;
+pub fn draw(stdout: &mut Stdout, input: &Input, flags: DrawFlagsMask) -> Result<()> {
+    if flags == 0 {
+        return Ok(());
+    }
 
-    // top/bottom edges
-    h_cut_section(stdout, 0, X_MAX - 1, 0, CutSecStyle::NoIntersect)?;
-    h_cut_section(stdout, 0, X_MAX - 1, Y_MAX - 1, CutSecStyle::NoIntersect)?;
+    if flags.is_set(DrawFlags::Clear) {
+        stdout.execute(terminal::Clear(terminal::ClearType::All))?;
+    }
 
-    // left/right edges
-    v_cut_section(stdout, 0, Y_MAX - 1, 0, CutSecStyle::IntersectBothEnds)?;
-    v_cut_section(
-        stdout,
-        0,
-        Y_MAX - 1,
-        X_MAX - 1,
-        CutSecStyle::IntersectBothEnds,
-    )?;
+    if flags.is_set(DrawFlags::ConstPerifs) {
+        print_const_perifs(stdout)?;
+    }
 
-    // prog menu separator
-    h_cut_section(
-        stdout,
-        0,
-        X_MAX - 1,
-        TOP_MENU_PROG_D_INDEX,
-        CutSecStyle::IntersectBothEnds,
-    )?;
-
-    // help menu separator
-    v_cut_section(
-        stdout,
-        TOP_MENU_PROG_D_INDEX,
-        Y_MAX - 1,
-        LEFT_MENU_HELP_R_INDEX,
-        CutSecStyle::IntersectBothEnds,
-    )?;
-
-    // help menu contents
-    print_controls(
-        stdout,
-        LEFT_MENU_HELP_L_INDEX + 1,
-        TOP_MENU_PROG_D_INDEX + 1,
-    )?;
-
-    for i in 0..=9 {
-        if (input.num_key_bitwise & (0x01 << i)) > 0 {
-            stdout
-                .queue(cursor::MoveTo(i + 1, 1))?
-                .queue(style::Print(format!("{}", i)))?;
+    if flags.is_set(DrawFlags::ProgContents) {
+        for i in 0..=9 {
+            if (input.num_key_bitwise & (0x01 << i)) > 0 {
+                stdout
+                    .queue(cursor::MoveTo(i + 1, 1))?
+                    .queue(style::Print(format!("{}", i)))?;
+            }
         }
     }
 
@@ -166,6 +180,49 @@ fn v_cut_section(
                 .queue(style::Print(V_CUT_SEC_CHAR))?;
         }
     }
+
+    Ok(())
+}
+
+fn print_const_perifs(stdout: &mut Stdout) -> Result<()> {
+    // top/bottom edges
+    h_cut_section(stdout, 0, X_MAX - 1, 0, CutSecStyle::NoIntersect)?;
+    h_cut_section(stdout, 0, X_MAX - 1, Y_MAX - 1, CutSecStyle::NoIntersect)?;
+
+    // left/right edges
+    v_cut_section(stdout, 0, Y_MAX - 1, 0, CutSecStyle::IntersectBothEnds)?;
+    v_cut_section(
+        stdout,
+        0,
+        Y_MAX - 1,
+        X_MAX - 1,
+        CutSecStyle::IntersectBothEnds,
+    )?;
+
+    // prog menu separator
+    h_cut_section(
+        stdout,
+        0,
+        X_MAX - 1,
+        TOP_MENU_PROG_D_INDEX,
+        CutSecStyle::IntersectBothEnds,
+    )?;
+
+    // help menu separator
+    v_cut_section(
+        stdout,
+        TOP_MENU_PROG_D_INDEX,
+        Y_MAX - 1,
+        LEFT_MENU_HELP_R_INDEX,
+        CutSecStyle::IntersectBothEnds,
+    )?;
+
+    // help menu contents
+    print_controls(
+        stdout,
+        LEFT_MENU_HELP_L_INDEX + 1,
+        TOP_MENU_PROG_D_INDEX + 1,
+    )?;
 
     Ok(())
 }
